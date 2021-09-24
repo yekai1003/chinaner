@@ -1,0 +1,16 @@
+[version]
+auth = "yekai"
+company = "pdj"
+buildday = "2019-01-01"
+ver = "1.0.0" # 版本
+
+[common]
+solidityPath = "sol"
+goPath = "contracts"
+abiSH = "./abi.sh"
+buildPath = "build"
+codeName = "socall.go"
+mainCodeName = "main.go"
+contractName = "pdbank" # 需要用户修改来处理哪个合约
+configCodeName = "config.go"
+configTomlName = "config.toml" # 需要用户修改来处理哪个合约
