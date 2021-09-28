@@ -6,13 +6,19 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/gookit/color"
 )
 
+const version = "1.0.0"
+const author = "Yekai"
+
 func Usage() {
-	fmt.Printf("%s build -file contract'name  -- for compiler contracts\n", os.Args[0])
-	fmt.Printf("%s init  -- init test dir\n", os.Args[0])
-	fmt.Printf("%s generate -file contract's name  -- generate contract's code\n", os.Args[0])
-	fmt.Printf("%s showabi  -- showabi \n", os.Args[0])
+	fmt.Printf("\nVersion:\n\t%s\nAuthor:\n\t%s\nUsage:\n", version, author)
+	fmt.Printf("\t%s build -file contract's name  -- for compiler contracts\n", os.Args[0])
+	fmt.Printf("\t%s init -dir DIRNAME -sdkpath SDKPATH  -- init test dir\n", os.Args[0])
+	fmt.Printf("\t%s generate -file contract's name  -- generate contract's code\n", os.Args[0])
+	fmt.Printf("\t%s showabi -abi ABIFILE  -- showabi \n\n\n", os.Args[0])
 }
 
 func run() {
@@ -25,8 +31,12 @@ func run() {
 	generateCMD := flag.NewFlagSet("generate", flag.ExitOnError)
 	generateCMDName := generateCMD.String("file", "", "contract's name")
 
-	jsonCMD := flag.NewFlagSet("json", flag.ExitOnError)
-	jsonCMDData := jsonCMD.String("array", "", "contract's params")
+	showAbiCMD := flag.NewFlagSet("showabi", flag.ExitOnError)
+	showAbiCMDName := showAbiCMD.String("abi", "", "ABIFILE")
+
+	initCMD := flag.NewFlagSet("init", flag.ExitOnError)
+	initCMDDir := initCMD.String("dir", "", "DIRNAME")
+	initCMDSdkpath := initCMD.String("sdkpath", "", "SDKPATH")
 
 	switch os.Args[1] {
 	case "build":
@@ -37,22 +47,23 @@ func run() {
 
 	case "init":
 		//初始化
-		if InitDir() != nil {
-			log.Panic("failed to init dir")
+		err := initCMD.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic("faile to Parse init CMD")
 		}
-		fmt.Println("init test dir sucess!")
+
 	case "generate":
 		err := generateCMD.Parse(os.Args[2:])
 		if err != nil {
 			log.Panic("faile to Parse generate CMD")
 		}
-	case "json":
-		err := jsonCMD.Parse(os.Args[2:])
-		if err != nil {
-			log.Panic("faile to Parse json CMD")
-		}
 	case "showabi":
-		templates.ShowAbi("contracts/demo.abi")
+
+		err := showAbiCMD.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic("faile to Parse showAbi CMD")
+		}
+
 	default:
 		Usage()
 		os.Exit(1)
@@ -73,10 +84,19 @@ func run() {
 			log.Panic("failed to get contract file name")
 		}
 		templates.Run(targetPath, *generateCMDName, "call.go")
+		rungomod(templates.GetWorkdir())
 	}
 
-	if jsonCMD.Parsed() {
-		fmt.Println("json:", *jsonCMDData)
+	if showAbiCMD.Parsed() {
+
+		templates.ShowAbi(*showAbiCMDName)
+	}
+
+	if initCMD.Parsed() {
+		if InitDir(*initCMDDir, *initCMDSdkpath) != nil {
+			log.Panic("failed to init dir")
+		}
+		color.Yellow.Println("done...")
 	}
 
 }

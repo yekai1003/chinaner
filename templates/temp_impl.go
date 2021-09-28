@@ -21,6 +21,7 @@ type FuncNoGasParams struct {
 	FuncName        string
 	NewContractName string
 	OutParams       string
+	OutShowRetValue string
 	InputParams     string
 	PrepareParams   string
 }
@@ -57,6 +58,18 @@ func isHasUint(infos []AbiInfo) bool {
 	for _, v := range infos {
 		for _, k := range v.Inputs {
 			if strings.Contains(k.Type, "uint") {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func isHasType(infos []AbiInfo, typename string) bool {
+	for _, v := range infos {
+		for _, k := range v.Inputs {
+			if k.Type == typename {
 				return true
 			}
 		}
@@ -103,9 +116,15 @@ func Impl_run_code(runCodePath, runCodeName, basicName string) error {
 	}
 	//2. 写什么
 	maintempdata := test_main_temp
-	if isHasUint(abiInfos) {
-		maintempdata = fmt.Sprintf(test_main_temp, "\t\"strconv\"\n\t\"math/big\"")
+	pkgName := ""
+	if isHasType(abiInfos, "uint256") {
+		pkgName = "\"strconv\"\n\t\"math/big\"\n"
 	}
+	if isHasType(abiInfos, "bytes32") {
+		pkgName += "\t\"encoding/hex\"\n"
+	}
+
+	maintempdata = fmt.Sprintf(test_main_temp, GetWorkdir(), pkgName)
 
 	_, err = outfile.WriteString(maintempdata)
 	if err != nil {
@@ -154,20 +173,10 @@ func Impl_run_code(runCodePath, runCodeName, basicName string) error {
 
 			// 如果是构造函数-部署函数
 			deploy_data.DeployParams = "(testClient.GetTransactOpts(),testClient"
-			for num, vv := range v.Inputs {
+			for num, _ := range v.Inputs {
 				//需要根据输入数据类型来判断如何处理:string,address,uint256
 				paramName := fmt.Sprintf("param%d", num)
-				if vv.Type == "address" {
-					deploy_data.DeployParams += " ," + paramName
-				} else if vv.Type == "uint256" {
-					deploy_data.DeployParams += fmt.Sprintf(" ,%s", paramName)
-				} else if vv.Type == "string" {
-					deploy_data.DeployParams += " ," + paramName
-				} else if vv.Type == "uint" {
-					deploy_data.DeployParams += fmt.Sprintf(" ,%s", paramName)
-				} else {
-					deploy_data.DeployParams += fmt.Sprintf(" ,%s", paramName)
-				}
+				deploy_data.DeployParams += fmt.Sprintf(" ,%s", paramName)
 
 			}
 			deploy_data.DeployParams += ")"
@@ -185,18 +194,10 @@ func Impl_run_code(runCodePath, runCodeName, basicName string) error {
 				func_nogas_data.PrepareParams = prepareData
 				func_nogas_data.InputParams = "(testClient.GetCallOpts()"
 
-				for num, vv := range v.Inputs {
+				for num, _ := range v.Inputs {
 					//需要根据输入数据类型来判断如何处理:string,address,uint256
 					paramName := fmt.Sprintf("param%d", num)
-					if vv.Type == "address" {
-						func_nogas_data.InputParams += " ," + paramName
-					} else if vv.Type == "uint256" || vv.Type == "uint" {
-						func_nogas_data.InputParams += fmt.Sprintf(",%s", paramName)
-					} else if vv.Type == "string" {
-						func_nogas_data.InputParams += " ," + paramName
-					} else {
-						func_nogas_data.InputParams += " ," + paramName
-					}
+					func_nogas_data.InputParams += " ," + paramName
 
 				}
 				func_nogas_data.InputParams += ")"
@@ -204,11 +205,12 @@ func Impl_run_code(runCodePath, runCodeName, basicName string) error {
 				num := 0
 				strOutPuts := ""
 				for _, _ = range v.Outputs {
-					strOutPuts = fmt.Sprintf("%sdata%d,", strOutPuts, num)
+					strOutPuts = fmt.Sprintf("%sval%d,", strOutPuts, num)
 					num++
 				}
 				strOutPuts += "err"
 				func_nogas_data.OutParams = strOutPuts
+				func_nogas_data.OutShowRetValue = makeShowRetVal(v.Outputs)
 
 				//模版的执行
 				err = nogas_temp.Execute(outfile, &func_nogas_data)
@@ -222,18 +224,10 @@ func Impl_run_code(runCodePath, runCodeName, basicName string) error {
 				func_gas_data.PrepareParams = prepareData
 				func_gas_data.InputParams = "(testClient.GetTransactOpts()"
 
-				for num, vv := range v.Inputs {
+				for num, _ := range v.Inputs {
 					//需要根据输入数据类型来判断如何处理:string,address,uint256
 					paramName := fmt.Sprintf("param%d", num)
-					if vv.Type == "address" {
-						func_gas_data.InputParams += " ," + paramName
-					} else if vv.Type == "uint256" {
-						func_gas_data.InputParams += fmt.Sprintf(" ,%s", paramName)
-					} else if vv.Type == "string" {
-						func_gas_data.InputParams += " ," + paramName
-					} else {
-						func_gas_data.InputParams += " ," + paramName
-					}
+					func_gas_data.InputParams += " ," + paramName
 
 				}
 				func_gas_data.InputParams += ")"
@@ -264,7 +258,6 @@ func Impl_main_code(runCodePath, basicName string) error {
 		fmt.Println("failed to read abi", err)
 		return err
 	}
-	funcNames := ""
 	//"abc","def","
 	num := 0
 	var funcInfos []FuncInfo
@@ -272,20 +265,13 @@ func Impl_main_code(runCodePath, basicName string) error {
 	// 2- 第一个函数
 	for _, v := range abiInfos {
 		if v.Type != "constructor" {
-			if num == 0 {
-				//第一个
-				funcNames += fmt.Sprintf(`"%s"`, v.Name)
-			} else {
-				funcNames += fmt.Sprintf(`,"%s"`, v.Name)
-			}
 			num++
 			funcInfo.FuncName = strings.Title(v.Name)
 			funcInfo.Num = num + 1
 			funcInfos = append(funcInfos, funcInfo)
 		}
 	}
-	main_str1 := fmt.Sprintf(test_run_main_temp, funcNames)
-	_, err = outfile.WriteString(main_str1)
+	_, err = outfile.WriteString(test_run_main_temp)
 	if err != nil {
 		fmt.Println("failed to write to main.go", err)
 		return err
@@ -318,7 +304,8 @@ func Run(buildPath, contractName, runCodeName string) {
 }
 
 func ShowAbi(abifile string) {
-	infos, err := readAbi(abifile)
+	abiName := strings.Replace(abifile, ".sol", ".abi", -1)
+	infos, err := readAbi(abiName)
 	if err != nil {
 		log.Panic("failed to readAbi:", err)
 	}
@@ -326,6 +313,16 @@ func ShowAbi(abifile string) {
 		fmt.Printf("%+v\n", v)
 	}
 }
+
+/*
+
+	param0, _ := hex.DecodeString(param0)
+    var param000 [32]byte
+    for i := 0; i < len(param00); i ++ {
+        param000[i] = param00[i]
+    }
+
+*/
 
 func makePrepareParams(params []InputsOutPuts) string {
 
@@ -337,9 +334,78 @@ func makePrepareParams(params []InputsOutPuts) string {
 			prepareData += fmt.Sprintf("\tparam%d := big.NewInt(int64(temp%d))\n", num, num)
 		} else if strings.Contains(v.Type, "int") {
 			prepareData += fmt.Sprintf("\tparam%d, _ := strconv.Atoi(params[%d])\n", num, num)
+		} else if v.Type == "bytes32" {
+			prepareData += fmt.Sprintf("\ttemp%d, _ := hex.DecodeString(params[%d])\n", num, num)
+			prepareData += fmt.Sprintf("\tvar  param%d [32]byte\n", num)
+			prepareData += fmt.Sprintf("\tfor i := 0; i < len(temp%d); i ++ {\n", num)
+			prepareData += fmt.Sprintf("\t\tparam%d[i] = temp%d[i]\n\t}\n", num, num)
+
+		} else if v.Type == "bytes" {
+			prepareData += fmt.Sprintf("\tparam%d := []byte(params[%d])\n", num, num)
+		} else if v.Type == "address" {
+			prepareData += fmt.Sprintf("\tparam%d := common.HexToAddress(params[%d])\n", num, num)
+
 		} else {
 			prepareData += fmt.Sprintf("\tparam%d := params[%d]\n", num, num)
 		}
 	}
 	return prepareData
+}
+
+func makeShowRetVal(params []InputsOutPuts) string {
+
+	endData := ""
+
+	for num, v := range params {
+		if v.Type == "bytes" {
+			endData += fmt.Sprintf("fmt.Println(\"val%d:\",string(val%d))\n", num, num)
+		} else {
+			endData += fmt.Sprintf("fmt.Println(\"val%d:\",val%d)\n", num, num)
+		}
+	}
+	return endData
+}
+
+func InitFile(dirname string) error {
+	//1. 写私钥
+	outfile, err := os.OpenFile(dirname+"/accounts/0x5946a2ec703e74ce91ac0703396be65daeb5ea99.pem", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Println("failed to open file", err)
+		return err
+	}
+
+	outfile.WriteString(test_pem_info)
+	outfile.Close()
+
+	//2. 写公钥
+	outfile, err = os.OpenFile(dirname+"/accounts/0x5946a2ec703e74ce91ac0703396be65daeb5ea99.public.pem", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Println("failed to open file", err)
+		return err
+	}
+
+	outfile.WriteString(test_pem_public)
+	outfile.Close()
+
+	//3. 写config.toml
+	outfile, err = os.OpenFile(dirname+"/config.toml", os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0666)
+	if err != nil {
+		fmt.Println("failed to open file", err)
+		return err
+	}
+
+	outfile.WriteString(test_config_info)
+	outfile.Close()
+
+	return err
+}
+
+func GetWorkdir() string {
+	dirname, err := os.Getwd()
+	if err != nil {
+		log.Panic("failed to Getwd:", err)
+	}
+	names := strings.Split(dirname, "/")
+
+	return names[len(names)-1]
 }
