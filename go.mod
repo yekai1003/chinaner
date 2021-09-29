@@ -1,8 +1,5 @@
-module chinaner
+module github.com/yekai1003/chinaner
 
 go 1.15
 
-require (
-	github.com/BurntSushi/toml v0.3.1
-	github.com/FISCO-BCOS/go-sdk v0.11.0
-)
+require github.com/gookit/color v1.4.2

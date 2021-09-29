@@ -1,7 +1,7 @@
 package main
 
 import (
-	"chinaner/templates"
+	"github.com/yekai1003/chinaner/templates"
 	"log"
 	"os"
 	"os/exec"
