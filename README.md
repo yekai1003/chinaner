@@ -39,7 +39,7 @@ Version: 0.6.10+commit.00c0fcaf.Linux.g++
 第二个需要安装的是FISCO-BCOS下的go-sdk工具，只需要下载源码包，直接编译即可。
 
 ```sh
-git https://github.com/FISCO-BCOS/go-sdk.git
+git clone https://github.com/FISCO-BCOS/go-sdk.git
 cd go-sdk/cmd/abigen
 go build
 ```
